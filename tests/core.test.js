@@ -44,4 +44,15 @@ assert.strictEqual(placed.join(), "0,0,1,0,0,0");
 
 // topColours keeps the most used, most used first.
 assert.deepStrictEqual(C.topColours(Int16Array.from([2, 2, 1, -1, 0, 2, 1]), 2), [2, 1]);
+
+// A colour group is the same-colour pegs joined side by side, not corner to corner, kept inside the box.
+const g5 = [1, 1, 0, 2, 2,
+            0, 1, 0, 0, 2,
+            1, 1, 1, 0, 0,
+            0, 0, 0, 2, 0];
+const r1 = C.region(g5, 5, 0, 0, { x0: 0, y0: 0, x1: 4, y1: 3 });
+assert.deepStrictEqual([r1.cells.size, r1.x0, r1.y0, r1.x1, r1.y1], [6, 0, 0, 2, 2]);
+assert.strictEqual(C.region(g5, 5, 3, 3, { x0: 0, y0: 0, x1: 4, y1: 3 }).cells.size, 1, "corner neighbours don't join");
+assert.strictEqual(C.region(g5, 5, 0, 0, { x0: 0, y0: 0, x1: 4, y1: 1 }).cells.size, 3, "stops at the box");
+
 console.log("CORE TESTS PASS");

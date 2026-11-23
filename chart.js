@@ -6,13 +6,15 @@ function drawChart(ctx, o) {
   for (let y = 0; y < v.ny; y++) for (let x = 0; x < v.nx; x++) {
     const X = v.x + x, Y = v.y + y, k = o.at(X, Y), cx = M + (x + 0.5) * cell, cy = M + (y + 0.5) * cell;
     if (!k || (o.only && k !== o.only)) { ctx.fillStyle = col.peg; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.6, cell * 0.09), 0, 7); ctx.fill(); continue; }
-    const faded = o.faded(X, Y, k);
+    const faded = o.faded(X, Y, k) || (o.out && o.out(X, Y));
     ctx.globalAlpha = faded ? 0.22 : 1;
     ctx.fillStyle = o.hex(k); ctx.beginPath(); ctx.arc(cx, cy, cell * 0.46, 0, 7); ctx.fill();
     if (cell >= 4 && !faded) { ctx.strokeStyle = col.ring; ctx.lineWidth = Math.max(0.75, cell * 0.06); ctx.stroke(); }   // black and white beads stay visible on either board
     if (cell >= 7) { ctx.fillStyle = col.board; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.15, 0, 7); ctx.fill(); }
     ctx.globalAlpha = 1;
   }
+  const b = o.box;   // the picked box in Select mode
+  if (b) { ctx.strokeStyle = col.guide; ctx.lineWidth = 2; ctx.strokeRect(M + b.x0 * cell, M + b.y0 * cell, (b.x1 - b.x0 + 1) * cell, (b.y1 - b.y0 + 1) * cell); }
   const g = o.guide;
   if (g && g.X >= v.x && g.X < v.x + v.nx && g.Y >= v.y && g.Y < v.y + v.ny) {   // the row and column guide
     const gx = M + (g.X - v.x) * cell, gy = M + (g.Y - v.y) * cell;

@@ -150,6 +150,18 @@
     return [...c.keys()].sort((p, q) => c.get(q) - c.get(p) || p - q).slice(0, n);
   }
 
-  root.BeadCore = { lab, dist, hexRgb, rgbHex, median, downscale, clearBackground, match, cleanup, sample, layout, place, topColours };
+  // The pegs of the same colour joined side by side to peg (X, Y), kept inside the box b; returns their indexes and the box they fill.
+  function region(grid, nx, X, Y, b) {
+    const k = grid[Y * nx + X], cells = new Set(), todo = [[X, Y]], r = { cells, x0: X, y0: Y, x1: X, y1: Y };
+    while (todo.length) {
+      const [x, y] = todo.pop(), i = y * nx + x;
+      if (x < b.x0 || y < b.y0 || x > b.x1 || y > b.y1 || cells.has(i) || grid[i] !== k) continue;
+      cells.add(i); r.x0 = Math.min(r.x0, x); r.x1 = Math.max(r.x1, x); r.y0 = Math.min(r.y0, y); r.y1 = Math.max(r.y1, y);
+      todo.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    return r;
+  }
+
+  root.BeadCore = { lab, dist, hexRgb, rgbHex, median, downscale, clearBackground, match, cleanup, sample, layout, place, topColours, region };
   if (typeof module !== "undefined") module.exports = root.BeadCore;
 })(typeof window !== "undefined" ? window : globalThis);

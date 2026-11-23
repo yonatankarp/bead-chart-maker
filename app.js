@@ -14,11 +14,13 @@ const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 if (!RANGES[state.range]) state.range = "artkal_c";
-if (!["look", "paint", "erase"].includes(state.mode)) state.mode = "look";
+if (!["look", "select", "paint", "erase"].includes(state.mode)) state.mode = "look";
+const painting = () => state.mode === "paint" || state.mode === "erase";
 const palById = id => state.pal.find(p => p.id === id);
 const keyOf = p => p.code + p.hex, bead = k => res.pal[k - 1];
 const sel = () => state.colour && res ? res.pal.findIndex(p => keyOf(p) === state.colour) + 1 : 0;
 let img = null, res = null, selectedRow = null, guide = null, stroke = null;
+let pick = null, anchor = null;   // Select mode: the picked box {x0, y0, x1, y1} on the boards (with cells when it's a colour group), and where a drag began
 const undo = [];
 const narrow = matchMedia("(max-width: 700px)");
 
@@ -41,7 +43,7 @@ function convert() {
   if (state.maxc && pal.length > state.maxc) { pal = C.topColours(idx, state.maxc).map(i => pal[i]); idx = C.match(cells, pal); }
   if (state.tidy && !cells.nearest) idx = C.cleanup(idx, gw, gh, 2);
   res = { ...L, B: state.board, bw: state.across, bh: state.down, pal: pal.map(({ code, name, hex }) => ({ code, name, hex })), base: C.place(idx, L) };
-  applyEdits();
+  applyEdits(); pick = null;
   if (state.view !== "all" && +state.view >= res.bw * res.bh) state.view = "all";
 }
 // Hand edits sit on top of the converted chart, peg by peg; a painted colour joins the chart's colours if it isn't one yet.
@@ -63,11 +65,16 @@ function view() {
   const i = +state.view, bx = i % res.bw, by = (i / res.bw) | 0;
   return { x: bx * res.B, y: by * res.B, nx: res.B, ny: res.B, name: `Board ${i + 1}` };
 }
-function counts(v) {
+const inPick = (P, X, Y) => P.cells ? P.cells.has(Y * res.nx + X) : X >= P.x0 && X <= P.x1 && Y >= P.y0 && Y <= P.y1;
+function counts(v, P) {
   const c = {};
-  for (let y = v.y; y < v.y + v.ny; y++) for (let x = v.x; x < v.x + v.nx; x++) { const k = at(x, y); if (k) c[k] = (c[k] || 0) + 1; }
+  if (P) v = { x: P.x0, y: P.y0, nx: P.x1 - P.x0 + 1, ny: P.y1 - P.y0 + 1 };
+  for (let y = v.y; y < v.y + v.ny; y++) for (let x = v.x; x < v.x + v.nx; x++) { const k = at(x, y); if (k && (!P || inPick(P, x, y))) c[k] = (c[k] || 0) + 1; }
   return c;
 }
+const picked = () => state.mode === "select" ? pick : null;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const sizeOf = P => `${plural(P.y1 - P.y0 + 1, "row")} × ${plural(P.x1 - P.x0 + 1, "column")}`;
 const boardOf = (X, Y) => ((Y / res.B) | 0) * res.bw + ((X / res.B) | 0);
 const boardsIn = () => state.view === "all" ? Array.from({ length: res.bw * res.bh }, (_, i) => i) : [+state.view];
 const isDone = (X, Y, k) => (state.done[boardOf(X, Y)] || []).includes(keyOf(bead(k)));
@@ -79,13 +86,14 @@ const MARGIN = 26;
 let cell = 10;
 function draw() {
   if (!res) return;
-  const v = view(), dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 600;
+  const v = view(), P = picked(), dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 600;
   cell = (w - MARGIN) / v.nx;
   const H = MARGIN + cell * v.ny;
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = H + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, w, H);
-  drawChart(ctx, { ...chartBits(v), cell, margin: MARGIN, only: state.mode === "look" ? sel() : 0, guide: state.mode === "look" ? guide : null,
+  drawChart(ctx, { ...chartBits(v), cell, margin: MARGIN, only: painting() ? 0 : sel(), guide: state.mode === "look" ? guide : null,
+    box: P && { x0: P.x0 - v.x, y0: P.y0 - v.y, x1: P.x1 - v.x, y1: P.y1 - v.y }, out: P && ((X, Y) => !inPick(P, X, Y)),
     col: { board: css("--board"), peg: css("--peg"), ring: css("--ring"), muted: css("--muted"), guide: css("--accent") } });
 }
 const chartBits = v => ({ v, at, hex: k => bead(k).hex, faded: isDone, multi: state.view === "all" && res.bw * res.bh > 1, B: res.B, font: css("--mono") || "monospace" });
@@ -108,23 +116,25 @@ function renderSettings() {
 }
 function renderFilter() {
   if (!res) return;
-  const v = view(), c = counts(v), n = res.bw * res.bh, paint = state.mode !== "look";
+  const v = view(), P = picked(), c = counts(v, P), n = res.bw * res.bh, paint = painting();
   $("boardsec").hidden = n === 1;
   $("boards").style.gridTemplateColumns = `repeat(${res.bw}, 1fr)`;
   $("boards").innerHTML = (n > 1 ? `<button type="button" data-view="all" style="grid-column:1/-1" aria-pressed="${state.view === "all"}">All boards</button>` : "")
     + Array.from({ length: n }, (_, i) => `<button type="button" data-view="${i}" aria-pressed="${state.view === String(i) || (n === 1)}">${i + 1}</button>`).join("");
-  const ids = (paint ? res.pal.map((_, i) => i + 1) : Object.keys(c).map(Number)).sort((p, q) => (c[q] || 0) - (c[p] || 0));
-  const only = sel();
+  const only = sel();   // the picked colour stays in the list even where there's none of it, so it can be unpicked
+  const ids = (paint ? res.pal.map((_, i) => i + 1) : [...new Set([...Object.keys(c).map(Number), ...(only ? [only] : [])])]).sort((p, q) => (c[q] || 0) - (c[p] || 0));
   $("colours").innerHTML = ids.map(k => { const p = bead(k), d = !paint && doneHere(k);
     return `<button type="button" data-colour="${k}" aria-pressed="${k === only}" class="${d ? "done" : ""}" title="${esc(p.code)} ${esc(p.name)}${d ? " (done)" : ""}">`
       + `<span class="sw" style="background:${p.hex}"></span><span class="code">${d ? "✓ " : ""}${esc(p.code)}</span><span class="nm">${esc(p.name)}</span><span class="count">${c[k] || 0}</span></button>`; }).join("")
     || `<p class="hint">No beads here.</p>`;
-  const total = Object.values(c).reduce((s, x) => s + x, 0), where = v.name.toLowerCase();
-  $("totalLabel").textContent = paint ? (only ? `Painting with ${bead(only).code}` : "Pick a colour to paint with") : only ? `${bead(only).code} on ${where}` : `All beads on ${where}`;
+  const total = Object.values(c).reduce((s, x) => s + x, 0), where = P ? (P.cells ? "in the group" : "in the box") : "on " + v.name.toLowerCase();
+  $("totalLabel").textContent = paint ? (only ? `Painting with ${bead(only).code}` : "Pick a colour to paint with") : only ? `${bead(only).code} ${where}` : `All beads ${where}`;
   $("total").textContent = only ? (c[only] || 0) : total;
+  if (P) $("status").textContent = `${P.cells ? bead(res.grid[P.cells.values().next().value]).code + " group · " : ""}${sizeOf(P)} · ${plural(total, "bead")}`
+    + (only && !P.cells ? ` · ${c[only] || 0} ${bead(only).code}` : "");   // under the chart, so a phone shows it too
   const db = $("donebtn");
   db.hidden = paint || !only;
-  if (only) db.textContent = doneHere(only) ? `Not done yet: ${bead(only).code}` : `Mark ${bead(only).code} done on ${n === 1 ? "this board" : state.view === "all" ? "every board" : where}`;
+  if (only) db.textContent = doneHere(only) ? `Not done yet: ${bead(only).code}` : `Mark ${bead(only).code} done on ${n === 1 ? "this board" : state.view === "all" ? "every board" : v.name.toLowerCase()}`;
 }
 function renderTools() {
   document.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
@@ -177,9 +187,9 @@ $("tol").addEventListener("input", e => { state.tol = +e.target.value; soon(); }
 $("smooth").addEventListener("input", e => { state.smooth = +e.target.value; soon(); });
 $("tidy").addEventListener("change", e => { state.tidy = e.target.checked; soon(); });
 $("maxc").addEventListener("input", e => { state.maxc = +e.target.value; soon(); });
-$("boards").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { state.view = b.dataset.view; guide = null; save(); render(false); } });
+$("boards").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { state.view = b.dataset.view; guide = pick = null; save(); render(false); } });
 $("colours").addEventListener("click", e => { const b = e.target.closest("[data-colour]"); if (!b) return;
-  const k = +b.dataset.colour; state.colour = sel() === k && state.mode === "look" ? null : keyOf(bead(k)); save(); render(false); });
+  const k = +b.dataset.colour; state.colour = sel() === k && !painting() ? null : keyOf(bead(k)); save(); render(false); });
 for (const s of ["mine", "range"]) $("src-" + s).addEventListener("change", () => { state.source = s; soon(); });
 $("donebtn").addEventListener("click", () => {
   const k = sel(); if (!k) return;
@@ -195,7 +205,8 @@ function pegAt(e) {
   return x < 0 || y < 0 || x >= v.nx || y >= v.ny ? null : { x, y, X: v.x + x, Y: v.y + y, v };
 }
 function point(p) {
-  if (!p) { $("status").textContent = state.mode === "look" ? "Tap a peg to see where it is and light up its row and column." : "Drag across pegs to " + state.mode + "."; return; }
+  if (!p) { $("status").textContent = state.mode === "look" ? "Tap a peg to see where it is and light up its row and column."
+    : state.mode === "select" ? "Drag a box to measure it, or tap a bead to pick its colour's beads joined to it." : "Drag across pegs to " + state.mode + "."; return; }
   const k = at(p.X, p.Y), B = res.B;
   const where = state.view === "all" && res.bw * res.bh > 1
     ? `Board ${boardOf(p.X, p.Y) + 1} · row ${(p.Y % B) + 1}, column ${(p.X % B) + 1}`
@@ -219,6 +230,11 @@ function undoLast() {
 canvas.addEventListener("pointerdown", e => {
   if (!res) return;
   const p = pegAt(e);
+  if (state.mode === "select") {
+    if (!p) return;
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    anchor = { X: p.X, Y: p.Y, moved: false, was: pick }; return;
+  }
   if (state.mode === "look") {
     guide = p && !(guide && guide.X === p.X && guide.Y === p.Y) ? { X: p.X, Y: p.Y } : null;
     point(p); draw(); return;
@@ -228,13 +244,28 @@ canvas.addEventListener("pointerdown", e => {
 });
 canvas.addEventListener("pointermove", e => {
   if (!res) return;
+  if (anchor) {   // past the chart's edge the box stops at the edge
+    const v = view(), r = canvas.getBoundingClientRect(), lim = (n, lo, len) => Math.max(lo, Math.min(lo + len - 1, lo + Math.floor((n - MARGIN) / cell)));
+    const X = lim(e.clientX - r.left, v.x, v.nx), Y = lim(e.clientY - r.top, v.y, v.ny), a = anchor;
+    if (!a.moved && X === a.X && Y === a.Y) return;
+    a.moved = true;
+    pick = { x0: Math.min(a.X, X), y0: Math.min(a.Y, Y), x1: Math.max(a.X, X), y1: Math.max(a.Y, Y) };
+    renderFilter(); draw(); return;
+  }
   const p = pegAt(e);
-  if (stroke) { if (p) paintAt(p); } else if (e.pointerType === "mouse") point(p);
+  if (stroke) { if (p) paintAt(p); } else if (e.pointerType === "mouse" && !picked()) point(p);   // keep the size on show
 });
-const endStroke = () => { if (!stroke) return; if (Object.keys(stroke).length) undo.push(stroke); stroke = null; save(); renderFilter(); renderTools(); };
+// A tap without a drag picks the same-colour beads joined to that bead, or clears the pick when it's already in it or the peg is empty.
+function tapPick({ X, Y, was }) {
+  const v = view();
+  pick = !at(X, Y) || (was && was.cells && inPick(was, X, Y)) ? null : C.region(res.grid, res.nx, X, Y, { x0: v.x, y0: v.y, x1: v.x + v.nx - 1, y1: v.y + v.ny - 1 });
+}
+const endStroke = () => {
+  if (anchor) { if (!anchor.moved) tapPick(anchor); anchor = null; if (!pick) point(null); renderFilter(); draw(); }
+  if (!stroke) return; if (Object.keys(stroke).length) undo.push(stroke); stroke = null; save(); renderFilter(); renderTools(); };
 canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
-document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; guide = null; point(null); save(); render(false); }));
+document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; guide = pick = null; point(null); save(); render(false); }));
 $("undo").addEventListener("click", undoLast);
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey && !e.target.closest?.("input, textarea, select")) { e.preventDefault(); undoLast(); }
