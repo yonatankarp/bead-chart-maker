@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Turn any picture into a pegboard bead chart in your own bead colours, split across boards.">
+<title>Bead Chart Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: settings rail on the left, the pegboard chart in the middle, the colour filter on the right; one column on a phone. */
+:root {
+  --bg: #f3f1f6; --panel: #ffffff; --fg: #1d1a24; --muted: #6c6578; --line: #ddd8e4;
+  --board: #e6e2ec; --peg: #c9c3d3; --accent: #7b3fa6; --warn: #b4531f;
+  --display: "Space Grotesk", system-ui, sans-serif; --body: "Inter", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #131118; --panel: #1c1924; --fg: #ece8f2; --muted: #9a93a8; --line: #2e2a38;
+  --board: #22202a; --peg: #3a3646; --accent: #c08ae6; --warn: #f0a070; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #131118; --panel: #1c1924; --fg: #ece8f2; --muted: #9a93a8; --line: #2e2a38;
+  --board: #22202a; --peg: #3a3646; --accent: #c08ae6; --warn: #f0a070; color-scheme: dark }
+[hidden] { display: none !important; }
+body { margin: 0; font-size: 14px; background: var(--bg); color: var(--fg); font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 32px; }
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 16px; }
+header h1 { font-family: var(--display); font-size: 1.6rem; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: 250px minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .main { grid-template-columns: 250px minmax(0, 1fr); } .filter { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.rail { display: grid; gap: 14px; }
+.rail section, .filter section { display: grid; gap: 6px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; font-weight: 600; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row label { font-size: 13px; }
+input[type=number] { width: 5.5em; }
+input[type=number], input[type=text], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=checkbox] { accent-color: var(--accent); }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
+canvas#chart { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.drop { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.file { position: relative; display: inline-block; }
+.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.boards { display: grid; gap: 4px; }
+.boards button { text-align: center; padding: 6px 0; font-family: var(--mono); font-size: 12px; }
+.colours { display: grid; gap: 4px; }
+.colours button { display: grid; grid-template-columns: 20px 48px 1fr auto; align-items: center; gap: 8px; }
+.sw { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); position: relative; }
+.sw::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--panel); }
+.code { font-family: var(--mono); font-size: 13px; }
+.count { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.total { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+.beads { grid-column: 1 / -1; display: grid; gap: 12px; }
+.beadgrid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .beadgrid { grid-template-columns: minmax(0, 1fr); } }
+.pal { display: grid; gap: 4px; }
+.pal .p { display: grid; grid-template-columns: 22px 36px 70px minmax(0, 1fr) auto 30px; gap: 6px; align-items: center; }
+.pal .p input[type=text] { width: 100%; min-width: 0; }
+.pal input[type=color] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+.pal .near { font-size: 11px; color: var(--warn); white-space: nowrap; }
+.pal .p[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.pal .x { text-align: center; padding: 4px 0; }
+#photo { display: block; max-width: 100%; height: auto; cursor: crosshair; border-radius: 6px; }
+.sampled { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.sampled .big { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 11px; height: 8em; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .12s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Bead Chart Maker</h1>
+    <p>Load a picture and get a pegboard chart in your own bead colours, split across as many boards as it needs. Pick a colour to see only where it goes. Everything runs in your browser; your pictures never leave your computer.</p>
+  </header>
+  <div class="main">
+    <aside class="rail box">
+      <section>
+        <p class="label">Picture</p>
+        <div class="row">
+          <span class="file"><button type="button">Choose a picture…</button><input id="pick" type="file" accept="image/*" aria-label="Choose a picture"></span>
+          <button type="button" id="example">Example</button>
+        </div>
+        <p class="hint" id="picname">Or drop or paste one onto the chart. A PNG with a see-through background keeps it see-through.</p>
+      </section>
+      <section>
+        <p class="label">Size</p>
+        <div class="row"><label for="width">Width</label><input id="width" type="number" min="8" max="480" step="1"><span class="hint">pegs</span></div>
+        <div class="row" id="presets"></div>
+        <div class="row"><label for="bsize">Board</label><input id="bsize" type="number" min="8" max="120" step="1"><span class="hint">pegs a side</span></div>
+        <p class="hint" id="sizeinfo"></p>
+      </section>
+      <section>
+        <p class="label">Background</p>
+        <div class="row"><input id="clearbg" type="checkbox"><label for="clearbg">Remove the background</label></div>
+        <label for="tol" class="hint">How alike it must be to the edges: <span id="tolv"></span></label>
+        <input id="tol" type="range" min="2" max="40" step="1">
+      </section>
+      <section>
+        <p class="label">Clean-up</p>
+        <label for="smooth" class="hint">Smooth noise first: <span id="smoothv"></span></label>
+        <input id="smooth" type="range" min="0" max="3" step="1">
+        <div class="row"><input id="tidy" type="checkbox"><label for="tidy">Remove stray beads</label></div>
+        <p class="hint">Drops beads with nothing beside them (they fall off when ironed) and single specks. Turn it off for pixel art with one-bead lines.</p>
+      </section>
+    </aside>
+
+    <div class="box">
+      <canvas id="chart" aria-label="Bead chart"></canvas>
+      <div class="status" id="status">Hover or tap a peg to see its row, column and colour.</div>
+    </div>
+
+    <aside class="filter box">
+      <section>
+        <p class="label">Board</p>
+        <div class="boards" id="boards"></div>
+      </section>
+      <section>
+        <p class="label">Colour</p>
+        <div class="colours" id="colours"></div>
+        <div class="total"><span id="totalLabel"></span><span class="count" id="total"></span></div>
+      </section>
+      <section>
+        <button type="button" id="copy">Copy chart as text</button>
+        <textarea id="copytext" hidden readonly aria-label="Chart as text"></textarea>
+      </section>
+    </aside>
+
+    <section class="beads box">
+      <div class="beadgrid">
+        <div class="pal-wrap">
+          <p class="label">My beads</p>
+          <p class="hint" style="margin:4px 0 8px">The chart uses only the ticked colours. Edit a code, a name or a colour, or select a row and click a pile in the photo to set its colour from the real beads.</p>
+          <div class="pal" id="pal"></div>
+          <div class="row" style="margin-top:8px"><button type="button" id="add">Add a colour</button><button type="button" id="reset">Back to the Artkal set</button></div>
+        </div>
+        <div>
+          <p class="label">Match from a photo</p>
+          <p class="hint" style="margin:4px 0 8px">Photograph a pile from each bag on white paper in daylight. Click the paper once to correct the light, then select a row on the left and click its pile. Without a selected row, a click adds a new colour.</p>
+          <div class="row" style="margin-bottom:8px">
+            <span class="file"><button type="button">Choose a photo…</button><input id="photopick" type="file" accept="image/*" aria-label="Choose a photo of your beads"></span>
+            <button type="button" id="whitebtn" aria-pressed="false">Click the white paper</button>
+          </div>
+          <canvas id="photo" hidden></canvas>
+          <div class="sampled" id="sampled" hidden><span class="big" id="sampledsw"></span><span id="sampledtxt"></span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="core.js"></script>
+<script>
+const C = window.BeadCore;
+const DEFAULT_PAL = [
+  ["C01", "White", "#f6f4f0"], ["C88", "Light grey", "#c4c0c6"], ["C134", "Lilac grey", "#a096aa"], ["C34", "Dark grey", "#64646c"],
+  ["C155", "Charcoal", "#363238"], ["C69", "Black", "#141016"], ["C27", "Dark purple", "#4e3454"], ["C96", "Caramel", "#b06c3e"],
+  ["C75", "Brown", "#805438"], ["C32", "Dark brown", "#462e22"], ["C08", "Hot pink", "#e63c96"], ["C132", "Magenta", "#aa3caa"],
+  ["C145", "Dark berry", "#6e1e3c"], ["C68", "Aqua", "#78c8d2"],
+].map(([code, name, hex], i) => ({ id: i + 1, code, name, hex, on: true }));
+const state = { width: 48, board: 48, clearbg: false, tol: 12, smooth: 0, tidy: true, view: "all", colour: null, pal: DEFAULT_PAL };
+try { Object.assign(state, JSON.parse(localStorage.getItem("bead-maker") || "{}")); } catch (e) {}
+const save = () => { try { localStorage.setItem("bead-maker", JSON.stringify(state)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const palById = id => state.pal.find(p => p.id === id);
+let img = null, res = null, selectedRow = null;
+
+// ---------- picture -> grid ----------
+function convert() {
+  if (!img) return;
+  const gw = state.width, gh = Math.max(1, Math.round(gw * img.naturalHeight / img.naturalWidth));
+  const W = Math.min(img.naturalWidth, gw * 4), H = Math.max(1, Math.round(W * img.naturalHeight / img.naturalWidth));
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const cx = cv.getContext("2d", { willReadFrequently: true });
+  cx.imageSmoothingEnabled = W < img.naturalWidth; cx.imageSmoothingQuality = "high";
+  cx.drawImage(img, 0, 0, W, H);
+  let px = cx.getImageData(0, 0, W, H).data;
+  if (state.smooth && W > gw) px = C.median(px, W, H, state.smooth);
+  const cells = C.downscale(px, W, H, gw, gh);
+  if (state.clearbg) C.clearBackground(cells, state.tol);
+  const pal = state.pal.filter(p => p.on);
+  let idx = C.match(cells, pal);
+  if (state.tidy && !cells.nearest) idx = C.cleanup(idx, gw, gh, 2);
+  const B = state.board, bw = Math.ceil(gw / B), bh = Math.ceil(gh / B);
+  res = { gw, gh, B, bw, bh, ox: Math.floor((bw * B - gw) / 2), oy: Math.floor((bh * B - gh) / 2),
+          ids: Array.from(idx, i => i < 0 ? 0 : pal[i].id) };
+  if (state.colour && !res.ids.includes(state.colour)) state.colour = null;
+  if (state.view !== "all" && +state.view >= bw * bh) state.view = "all";
+}
+const at = (X, Y) => { const x = X - res.ox, y = Y - res.oy; return x < 0 || y < 0 || x >= res.gw || y >= res.gh ? 0 : res.ids[y * res.gw + x]; };
+function view() {
+  if (state.view === "all") return { x: 0, y: 0, nx: res.bw * res.B, ny: res.bh * res.B, name: "All boards" };
+  const i = +state.view, bx = i % res.bw, by = (i / res.bw) | 0;
+  return { x: bx * res.B, y: by * res.B, nx: res.B, ny: res.B, name: `Board ${i + 1}` };
+}
+function counts(v) {
+  const c = {};
+  for (let y = v.y; y < v.y + v.ny; y++) for (let x = v.x; x < v.x + v.nx; x++) { const k = at(x, y); if (k) c[k] = (c[k] || 0) + 1; }
+  return c;
+}
+
+// ---------- chart ----------
+const canvas = $("chart"), ctx = canvas.getContext("2d");
+const MARGIN = 26;
+let cell = 10;
+function draw() {
+  if (!res) return;
+  const v = view(), dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 600;
+  cell = (w - MARGIN) / v.nx;
+  const H = MARGIN + cell * v.ny;
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, w, H);
+  ctx.fillStyle = css("--board"); ctx.fillRect(MARGIN, MARGIN, cell * v.nx, cell * v.ny);
+  const peg = css("--peg"), bg = css("--board");
+  for (let y = 0; y < v.ny; y++) for (let x = 0; x < v.nx; x++) {
+    const k = at(v.x + x, v.y + y), cx = MARGIN + (x + 0.5) * cell, cy = MARGIN + (y + 0.5) * cell;
+    if (!k || (state.colour && k !== state.colour)) { ctx.fillStyle = peg; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.6, cell * 0.09), 0, 7); ctx.fill(); continue; }
+    ctx.fillStyle = palById(k).hex; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.46, 0, 7); ctx.fill();
+    if (cell >= 7) { ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.15, 0, 7); ctx.fill(); }
+  }
+  ctx.font = `500 ${Math.min(11, Math.max(7, cell * 0.9))}px ${css("--mono")}`;
+  ctx.fillStyle = css("--muted"); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const step = cell < 6 ? 16 : 8, multi = state.view === "all" && res.bw * res.bh > 1;
+  const lines = (n, along) => {
+    for (let i = 0; i <= n; i++) {
+      const p = MARGIN + i * cell, edge = multi && i % res.B === 0 && i > 0 && i < n, major = i % 8 === 0;
+      if (!edge && !major) continue;
+      ctx.strokeStyle = edge ? "#d23c3c" : css("--muted"); ctx.globalAlpha = edge ? 0.9 : 0.45; ctx.lineWidth = edge ? 2 : 1;
+      ctx.beginPath();
+      if (along) { ctx.moveTo(p, MARGIN); ctx.lineTo(p, MARGIN + v.ny * cell); } else { ctx.moveTo(MARGIN, p); ctx.lineTo(MARGIN + v.nx * cell, p); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    for (let i = 0; i < n; i += (n <= 48 ? 4 : step)) {
+      const label = multi ? (i % res.B) + 1 : i + 1;
+      if (along) ctx.fillText(label, MARGIN + (i + 0.5) * cell, MARGIN / 2); else ctx.fillText(label, MARGIN / 2, MARGIN + (i + 0.5) * cell);
+    }
+  };
+  lines(v.nx, true); lines(v.ny, false);
+}
+
+// ---------- rails ----------
+function renderSettings() {
+  $("width").value = state.width; $("bsize").value = state.board; $("clearbg").checked = state.clearbg;
+  $("tol").value = state.tol; $("tolv").textContent = state.tol; $("smooth").value = state.smooth;
+  $("smoothv").textContent = ["off", "light", "medium", "strong"][state.smooth]; $("tidy").checked = state.tidy;
+  $("presets").innerHTML = [1, 2, 3, 4].map(n => `<button type="button" data-w="${n * state.board}" aria-pressed="${state.width === n * state.board}">${n} across</button>`).join("");
+  if (res) $("sizeinfo").textContent = `${res.gw} × ${res.gh} pegs on ${res.bw * res.bh} board${res.bw * res.bh > 1 ? "s" : ""} (${res.bw} across, ${res.bh} down).`;
+}
+function renderFilter() {
+  if (!res) return;
+  const v = view(), c = counts(v);
+  const n = res.bw * res.bh;
+  $("boards").style.gridTemplateColumns = `repeat(${res.bw}, 1fr)`;
+  $("boards").innerHTML = (n > 1 ? `<button type="button" data-view="all" style="grid-column:1/-1" aria-pressed="${state.view === "all"}">All boards</button>` : "")
+    + Array.from({ length: n }, (_, i) => `<button type="button" data-view="${i}" aria-pressed="${state.view === String(i) || (n === 1)}">${i + 1}</button>`).join("");
+  const ids = Object.keys(c).map(Number).sort((p, q) => c[q] - c[p]);
+  $("colours").innerHTML = ids.map(k => { const p = palById(k);
+    return `<button type="button" data-colour="${k}" aria-pressed="${k === state.colour}"><span class="sw" style="background:${p.hex}"></span><span class="code">${esc(p.code)}</span><span>${esc(p.name)}</span><span class="count">${c[k]}</span></button>`; }).join("")
+    || `<p class="hint">No beads here.</p>`;
+  const total = Object.values(c).reduce((s, x) => s + x, 0);
+  $("totalLabel").textContent = state.colour ? `${palById(state.colour).code} on ${v.name.toLowerCase()}` : `All beads on ${v.name.toLowerCase()}`;
+  $("total").textContent = state.colour ? (c[state.colour] || 0) : total;
+}
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+function renderPal() {
+  const labs = state.pal.map(p => C.lab(...C.hexRgb(p.hex)));
+  $("pal").innerHTML = state.pal.map((p, i) => {
+    let near = "";
+    state.pal.forEach((q, j) => { if (j !== i && p.on && q.on && C.dist(labs[i], labs[j]) < 6) near = `close to ${esc(q.code)}`; });
+    return `<div class="p" data-id="${p.id}" aria-current="${p.id === selectedRow}">
+      <input type="checkbox" id="on-${p.id}" data-f="on" ${p.on ? "checked" : ""} aria-label="Use ${esc(p.code)}">
+      <input type="color" id="hex-${p.id}" data-f="hex" value="${p.hex}" aria-label="Colour of ${esc(p.code)}">
+      <input type="text" id="code-${p.id}" data-f="code" value="${esc(p.code)}" aria-label="Code">
+      <input type="text" id="name-${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Name">
+      <span class="near">${near}</span>
+      <button type="button" class="x" data-del="${p.id}" aria-label="Remove ${esc(p.code)}">×</button></div>`;
+  }).join("");
+}
+function render(again = true) { if (again) convert(); renderSettings(); renderFilter(); draw(); }
+
+// ---------- events ----------
+let pending = 0;
+const soon = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(() => { save(); render(); }); };
+const num = (el, lo, hi) => Math.max(lo, Math.min(hi, Math.round(+el.value || lo)));
+$("width").addEventListener("change", e => { state.width = num(e.target, 8, 480); soon(); });
+$("bsize").addEventListener("change", e => { state.board = num(e.target, 8, 120); state.view = "all"; soon(); });
+$("presets").addEventListener("click", e => { const b = e.target.closest("[data-w]"); if (b) { state.width = +b.dataset.w; soon(); } });
+$("clearbg").addEventListener("change", e => { state.clearbg = e.target.checked; soon(); });
+$("tol").addEventListener("input", e => { state.tol = +e.target.value; soon(); });
+$("smooth").addEventListener("input", e => { state.smooth = +e.target.value; soon(); });
+$("tidy").addEventListener("change", e => { state.tidy = e.target.checked; soon(); });
+$("boards").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { state.view = b.dataset.view; save(); render(false); } });
+$("colours").addEventListener("click", e => { const b = e.target.closest("[data-colour]"); if (!b) return;
+  const k = +b.dataset.colour; state.colour = state.colour === k ? null : k; save(); render(false); });
+
+$("pal").addEventListener("input", e => {
+  const row = e.target.closest(".p"), f = e.target.dataset.f; if (!row || !f) return;
+  const p = palById(+row.dataset.id); p[f] = f === "on" ? e.target.checked : e.target.value;
+  if (f === "on" || f === "hex") soon(); else { save(); renderFilter(); }
+});
+$("pal").addEventListener("change", e => { if (e.target.dataset.f === "on" || e.target.dataset.f === "hex") renderPal(); });
+$("pal").addEventListener("click", e => {
+  const del = e.target.closest("[data-del]");
+  if (del) { state.pal = state.pal.filter(p => p.id !== +del.dataset.del); if (selectedRow === +del.dataset.del) selectedRow = null; renderPal(); soon(); return; }
+  const row = e.target.closest(".p"); if (!row || e.target.matches("input")) return;
+  selectedRow = selectedRow === +row.dataset.id ? null : +row.dataset.id; renderPal();
+});
+$("pal").addEventListener("focusin", e => { const row = e.target.closest(".p"); if (row && selectedRow !== +row.dataset.id) { selectedRow = +row.dataset.id; row.setAttribute("aria-current", "true");
+  $("pal").querySelectorAll(".p").forEach(r => r !== row && r.setAttribute("aria-current", "false")); } });
+const nextId = () => Math.max(0, ...state.pal.map(p => p.id)) + 1;
+function addColour(hex, name = "New colour") { const p = { id: nextId(), code: "?", name, hex, on: true }; state.pal.push(p); selectedRow = p.id; renderPal(); soon(); return p; }
+$("add").addEventListener("click", () => addColour("#888888"));
+$("reset").addEventListener("click", () => { state.pal = DEFAULT_PAL.map(p => ({ ...p })); selectedRow = null; renderPal(); soon(); });
+
+$("copy").addEventListener("click", () => {
+  const v = view(), c = counts(v), ids = Object.keys(c).map(Number).sort((p, q) => c[q] - c[p]);
+  const L = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", key = {};
+  ids.forEach((k, i) => key[k] = L[i] || "#");
+  const rows = []; for (let y = v.y; y < v.y + v.ny; y++) { let s = ""; for (let x = v.x; x < v.x + v.nx; x++) { const k = at(x, y); s += k ? key[k] : "."; } rows.push(s); }
+  const text = `${v.name}, ${v.nx} × ${v.ny}; . is an empty peg\n` + ids.map(k => `${key[k]} = ${palById(k).code} ${palById(k).name} (${c[k]})`).join("\n") + "\n\n" + rows.join("\n");
+  const ta = $("copytext"); ta.value = text;
+  const fallback = () => { ta.hidden = false; ta.focus(); ta.select(); $("copy").textContent = "Select all and copy"; };
+  try { navigator.clipboard.writeText(text).then(() => { ta.hidden = true; $("copy").textContent = "Copied"; setTimeout(() => $("copy").textContent = "Copy chart as text", 1500); }, fallback); }
+  catch (e) { fallback(); }
+});
+
+function point(e) {
+  if (!res) return;
+  const r = canvas.getBoundingClientRect(), v = view();
+  const x = Math.floor((e.clientX - r.left - MARGIN) / cell), y = Math.floor((e.clientY - r.top - MARGIN) / cell);
+  if (x < 0 || y < 0 || x >= v.nx || y >= v.ny) { $("status").textContent = "Hover or tap a peg to see its row, column and colour."; return; }
+  const k = at(v.x + x, v.y + y), B = res.B;
+  const where = state.view === "all" && res.bw * res.bh > 1
+    ? `Board ${((v.y + y) / B | 0) * res.bw + ((v.x + x) / B | 0) + 1} · row ${(y % B) + 1}, column ${(x % B) + 1}`
+    : `${v.name} · row ${y + 1}, column ${x + 1}`;
+  $("status").textContent = where + " · " + (k ? `${palById(k).code} ${palById(k).name}` : "empty peg");
+}
+canvas.addEventListener("pointermove", point);
+canvas.addEventListener("pointerdown", point);
+
+// ---------- loading pictures ----------
+function load(src, name) {
+  const im = new Image();
+  im.onload = () => { img = im; $("picname").textContent = `${name}, ${im.naturalWidth} × ${im.naturalHeight}px.`; render(); };
+  im.onerror = () => { $("picname").textContent = `Couldn't open ${name}. Try a PNG or JPEG.`; };
+  im.src = src;
+}
+const loadFile = f => { if (f && f.type.startsWith("image/")) load(URL.createObjectURL(f), f.name); };
+$("pick").addEventListener("change", e => loadFile(e.target.files[0]));
+$("example").addEventListener("click", () => load(exampleImage(), "Example donut"));
+
+// The example: a donut drawn here, so the site ships no picture files.
+function exampleImage() {
+  const c = document.createElement("canvas"); c.width = c.height = 360;
+  const x = c.getContext("2d"), cx = 180, cy = 186;
+  const blob = (rx, ry, wob, n) => { x.beginPath();
+    for (let i = 0; i <= 120; i++) { const a = i / 120 * Math.PI * 2, k = 1 + wob * Math.sin(a * n);
+      x.lineTo(cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k); } x.closePath(); };
+  const ell = (rx, ry, dy = 0) => { x.beginPath(); x.ellipse(cx, cy + dy, rx, ry, 0, 0, Math.PI * 2); };
+  x.fillStyle = "#2a1c16"; ell(158, 126, 6); x.fill();                              // outline
+  let g = x.createRadialGradient(cx - 40, cy - 50, 20, cx, cy, 160);
+  g.addColorStop(0, "#c98a52"); g.addColorStop(0.7, "#a8642f"); g.addColorStop(1, "#6e4024");
+  x.fillStyle = g; ell(150, 118, 4); x.fill();                                      // dough
+  x.fillStyle = "#2a1c16"; blob(134, 102, 0.06, 9); x.fill();
+  g = x.createLinearGradient(0, 70, 0, 300); g.addColorStop(0, "#f27ab8"); g.addColorStop(1, "#d23688");
+  x.fillStyle = g; blob(128, 96, 0.06, 9); x.fill();                                // icing
+  x.fillStyle = "#ffffff"; x.beginPath(); x.ellipse(cx - 62, cy - 52, 26, 9, -0.45, 0, Math.PI * 2); x.fill();
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const cols = ["#ffffff", "#78c8d2", "#6e1e3c", "#ffffff", "#78c8d2"];
+  x.lineCap = "round"; x.lineWidth = 9;
+  for (let i = 0; i < 26; i++) {
+    const a = rnd() * Math.PI * 2, r = 0.45 + rnd() * 0.45, px = cx + Math.cos(a) * 112 * r, py = cy + Math.sin(a) * 84 * r, t = rnd() * Math.PI;
+    x.strokeStyle = cols[i % cols.length]; x.beginPath(); x.moveTo(px - Math.cos(t) * 9, py - Math.sin(t) * 9); x.lineTo(px + Math.cos(t) * 9, py + Math.sin(t) * 9); x.stroke();
+  }
+  x.fillStyle = "#2a1c16"; ell(50, 36); x.fill();                                   // hole rim
+  x.fillStyle = "#8a5230"; ell(44, 30, 4); x.fill();
+  x.globalCompositeOperation = "destination-out"; ell(38, 24, -2); x.fill();
+  return c.toDataURL("image/png");
+}
+const box = canvas.parentElement;
+box.addEventListener("dragover", e => { e.preventDefault(); box.classList.add("drop"); });
+box.addEventListener("dragleave", () => box.classList.remove("drop"));
+box.addEventListener("drop", e => { e.preventDefault(); box.classList.remove("drop"); loadFile(e.dataTransfer.files[0]); });
+document.addEventListener("paste", e => { const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (f) loadFile(f); });
+
+// ---------- bead photo sampling ----------
+const photo = $("photo"), pctx = photo.getContext("2d", { willReadFrequently: true });
+let photoPx = null, gains = null, whiteMode = false;
+$("photopick").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const im = new Image();
+  im.onload = () => {
+    const s = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    photo.width = Math.round(im.naturalWidth * s); photo.height = Math.round(im.naturalHeight * s);
+    pctx.drawImage(im, 0, 0, photo.width, photo.height);
+    photoPx = pctx.getImageData(0, 0, photo.width, photo.height).data; gains = null; photo.hidden = false;
+  };
+  im.src = URL.createObjectURL(f);
+});
+$("whitebtn").addEventListener("click", () => { whiteMode = !whiteMode; $("whitebtn").setAttribute("aria-pressed", whiteMode); });
+photo.addEventListener("click", e => {
+  if (!photoPx) return;
+  const r = photo.getBoundingClientRect(), x = Math.round((e.clientX - r.left) * photo.width / r.width), y = Math.round((e.clientY - r.top) * photo.height / r.height);
+  const rad = Math.max(4, Math.round(photo.width / 200));
+  if (whiteMode) {
+    const w = C.sample(photoPx, photo.width, photo.height, x, y, rad * 2, null);
+    gains = w.map(v => 245 / Math.max(1, v)); whiteMode = false; $("whitebtn").setAttribute("aria-pressed", "false");
+    show(w.map((v, i) => v * gains[i]), "Light corrected from the paper. Now select a row and click its pile."); return;
+  }
+  const hex = C.rgbHex(C.sample(photoPx, photo.width, photo.height, x, y, rad, gains));
+  const target = palById(selectedRow);
+  if (target) { target.hex = hex; renderPal(); soon(); show(C.hexRgb(hex), `${target.code} ${target.name} set to ${hex}.`); }
+  else {
+    const l = C.lab(...C.hexRgb(hex)); let best = null, d = Infinity;
+    state.pal.forEach(p => { const e2 = C.dist(l, C.lab(...C.hexRgb(p.hex))); if (e2 < d) { d = e2; best = p; } });
+    addColour(hex, "From photo");
+    show(C.hexRgb(hex), `Added ${hex}. Nearest existing colour: ${best ? best.code + " " + best.name : "none"}. Give it its code.`);
+  }
+});
+function show(rgb, text) { $("sampled").hidden = false; $("sampledsw").style.background = C.rgbHex(rgb); $("sampledtxt").textContent = text; }
+
+new ResizeObserver(draw).observe(canvas);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+renderPal(); renderSettings();
+load(exampleImage(), "Example donut");
+</script>
+</body>
+</html>
