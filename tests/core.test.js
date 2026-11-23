@@ -30,4 +30,18 @@ assert.strictEqual(cl[24], -1, "lone bead removed"); assert.strictEqual(cl[12], 
 const flat = img(20, 20, () => [200, 100, 50, 255]); flat[(10 * 20 + 10) * 4] = 0;
 assert.deepStrictEqual(C.sample(flat, 20, 20, 10, 10, 3, [1.2, 1, 0.5]), [240, 100, 25]);
 assert.strictEqual(C.rgbHex([300, -5, 15.6]), "#ff0010");
+// Layout: a 2:1 picture on 2x2 boards of 10 fills the width and is centred down; zoom and pan move it.
+let L = C.layout(200, 100, 2, 2, 10);
+assert.deepStrictEqual(L, { nx: 20, ny: 20, gw: 20, gh: 10, ox: 0, oy: 5 });
+assert.strictEqual(C.layout(200, 100, 2, 2, 10, 1, 0, -1).oy, 0, "pan up to the top");
+assert.strictEqual(C.layout(200, 100, 2, 2, 10, 1, 0, 1).oy, 10, "pan down to the bottom");
+L = C.layout(100, 100, 1, 1, 10, 2);                       // zoomed twice: 20x20 over a 10x10 board, centred
+assert.deepStrictEqual([L.gw, L.ox, C.layout(100, 100, 1, 1, 10, 2, -1).ox], [20, -5, 0]);
+
+// Place cuts off what hangs over and turns palette indexes into board ids (0 empty).
+const placed = C.place(Int16Array.from([0, 1, -1, 2]), { nx: 3, ny: 2, gw: 2, gh: 2, ox: 2, oy: 0 });
+assert.strictEqual(placed.join(), "0,0,1,0,0,0");
+
+// topColours keeps the most used, most used first.
+assert.deepStrictEqual(C.topColours(Int16Array.from([2, 2, 1, -1, 0, 2, 1]), 2), [2, 1]);
 console.log("CORE TESTS PASS");

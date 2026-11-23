@@ -16,7 +16,12 @@ A static browser tool that turns a picture into a pegboard chart for fuse beads 
   Colours are matched in Lab space.
 - Match from a photo: photograph a pile from each bag on white paper, click the paper to correct the light,
   then click a pile to set a colour from the real beads. Handy for bags that lost their labels.
-- Pick a board and a colour to see only those beads, with counts. Copy the chart as text.
+- Zoom and move the picture on the boards, and cap the number of colours (fewer bags to buy).
+- Paint and erase beads by hand, with undo (Ctrl+Z); hand edits stay on their pegs.
+- Pick a board and a colour to see only those beads, with counts, and mark a colour done on a board.
+  Tap a peg to light up its row and column.
+- Download a board, or all of them, as a PNG with its colour list, or copy the chart as text.
+- The last picture, hand edits and progress are kept in the browser, so a reload carries on.
 
 Everything runs in the browser; pictures never leave your computer.
 
@@ -27,6 +32,11 @@ Open `index.html` directly in a browser, or serve the folder:
 ```bash
 python3 -m http.server 5173
 ```
+
+## Files
+
+`core.js` turns pictures into bead grids (pure functions, tested), `chart.js` draws charts, `app.js` runs the page,
+`photo.js` matches colours from a photo, `store.js` keeps the picture, `example.js` draws the example, `palettes.js` holds the colours.
 
 ## Test
 

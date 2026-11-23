@@ -123,6 +123,33 @@
     return ch.map((v, c) => v.sort((a, b) => a - b)[v.length >> 1] * (gains ? gains[c] : 1));
   }
 
-  root.BeadCore = { lab, dist, hexRgb, rgbHex, median, downscale, clearBackground, match, cleanup, sample };
+  // Where the picture sits on the boards: fitted to them, then zoomed, then moved. pan is -1..1 across the
+  // free room (or, zoomed past the boards, across the part that hangs over): -1 left or top, 0 centred, 1 right or bottom.
+  function layout(iw, ih, across, down, B, zoom = 1, panX = 0, panY = 0) {
+    const nx = across * B, ny = down * B, ar = iw / ih;
+    let gw = nx, gh = Math.max(1, Math.round(gw / ar));
+    if (gh > ny) { gh = ny; gw = Math.max(1, Math.round(gh * ar)); }
+    gw = Math.max(1, Math.round(gw * zoom)); gh = Math.max(1, Math.round(gh * zoom));
+    return { nx, ny, gw, gh, ox: Math.round((nx - gw) / 2 * (1 + panX)) | 0, oy: Math.round((ny - gh) / 2 * (1 + panY)) | 0 };
+  }
+
+  // The picture grid (palette index or -1) onto the boards (palette index + 1, 0 for an empty peg); what hangs over is cut off.
+  function place(idx, L) {
+    const grid = new Int16Array(L.nx * L.ny);
+    for (let y = 0; y < L.gh; y++) {
+      const Y = y + L.oy; if (Y < 0 || Y >= L.ny) continue;
+      for (let x = 0; x < L.gw; x++) { const X = x + L.ox; if (X >= 0 && X < L.nx) grid[Y * L.nx + X] = idx[y * L.gw + x] + 1; }
+    }
+    return grid;
+  }
+
+  // The n most used palette indexes in a matched grid, most used first.
+  function topColours(idx, n) {
+    const c = new Map();
+    for (const i of idx) if (i >= 0) c.set(i, (c.get(i) || 0) + 1);
+    return [...c.keys()].sort((p, q) => c.get(q) - c.get(p) || p - q).slice(0, n);
+  }
+
+  root.BeadCore = { lab, dist, hexRgb, rgbHex, median, downscale, clearBackground, match, cleanup, sample, layout, place, topColours };
   if (typeof module !== "undefined") module.exports = root.BeadCore;
 })(typeof window !== "undefined" ? window : globalThis);
