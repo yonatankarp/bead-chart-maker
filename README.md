@@ -7,7 +7,7 @@ A static browser tool that turns a picture into a pegboard chart for fuse beads 
 ## Features
 
 - Load a picture by file, drag and drop, or paste. See-through PNG backgrounds stay empty.
-- Set the width in pegs and your board size; the chart is split and centred across the boards.
+- Add or remove boards across and down, and set your board size; the picture fills the boards as far as its shape allows.
 - Optional background removal (flood fill from the edges), noise smoothing and stray-bead clean-up
   (lone beads fall off when ironed). Pixel art no bigger than the chart is copied exactly.
 - Colours are matched in Lab space to your own bead list, which you can edit, tick on and off, and save in the browser.

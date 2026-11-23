@@ -36,6 +36,10 @@ header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row label { font-size: 13px; }
 input[type=number] { width: 5.5em; }
+.step button { width: 32px; padding: 4px 0; text-align: center; font-size: 16px; line-height: 1; }
+.step button:disabled { opacity: 0.4; cursor: default; }
+.steplabel { font-size: 13px; width: 4em; }
+.step output { font-family: var(--mono); font-size: 14px; min-width: 1.5em; text-align: center; font-variant-numeric: tabular-nums; }
 input[type=number], input[type=text], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=checkbox] { accent-color: var(--accent); }
@@ -93,8 +97,8 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
       </section>
       <section>
         <p class="label">Size</p>
-        <div class="row"><label for="width">Width</label><input id="width" type="number" min="8" max="480" step="1"><span class="hint">pegs</span></div>
-        <div class="row" id="presets"></div>
+        <div class="row step"><span class="steplabel">Across</span><button type="button" id="across-" aria-label="One board fewer across">−</button><output id="acrossv" aria-live="polite"></output><button type="button" id="across+" aria-label="One board more across">+</button></div>
+        <div class="row step"><span class="steplabel">Down</span><button type="button" id="down-" aria-label="One board fewer down">−</button><output id="downv" aria-live="polite"></output><button type="button" id="down+" aria-label="One board more down">+</button></div>
         <div class="row"><label for="bsize">Board</label><input id="bsize" type="number" min="8" max="120" step="1"><span class="hint">pegs a side</span></div>
         <p class="hint" id="sizeinfo"></p>
       </section>
@@ -166,7 +170,8 @@ const DEFAULT_PAL = [
   ["C75", "Brown", "#805438"], ["C32", "Dark brown", "#462e22"], ["C08", "Hot pink", "#e63c96"], ["C132", "Magenta", "#aa3caa"],
   ["C145", "Dark berry", "#6e1e3c"], ["C68", "Aqua", "#78c8d2"],
 ].map(([code, name, hex], i) => ({ id: i + 1, code, name, hex, on: true }));
-const state = { width: 48, board: 48, clearbg: false, tol: 12, smooth: 0, tidy: true, view: "all", colour: null, pal: DEFAULT_PAL };
+const MAX_BOARDS = 8;
+const state = { across: 1, down: 1, board: 48, clearbg: false, tol: 12, smooth: 0, tidy: true, view: "all", colour: null, pal: DEFAULT_PAL };
 try { Object.assign(state, JSON.parse(localStorage.getItem("bead-maker") || "{}")); } catch (e) {}
 const save = () => { try { localStorage.setItem("bead-maker", JSON.stringify(state)); } catch (e) {} };
 const $ = id => document.getElementById(id);
@@ -177,7 +182,10 @@ let img = null, res = null, selectedRow = null;
 // ---------- picture -> grid ----------
 function convert() {
   if (!img) return;
-  const gw = state.width, gh = Math.max(1, Math.round(gw * img.naturalHeight / img.naturalWidth));
+  // The picture fills the boards as far as its shape allows, centred on them.
+  const B = state.board, bw = state.across, bh = state.down, ar = img.naturalWidth / img.naturalHeight;
+  let gw = bw * B, gh = Math.max(1, Math.round(gw / ar));
+  if (gh > bh * B) { gh = bh * B; gw = Math.max(1, Math.round(gh * ar)); }
   const W = Math.min(img.naturalWidth, gw * 4), H = Math.max(1, Math.round(W * img.naturalHeight / img.naturalWidth));
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const cx = cv.getContext("2d", { willReadFrequently: true });
@@ -190,7 +198,6 @@ function convert() {
   const pal = state.pal.filter(p => p.on);
   let idx = C.match(cells, pal);
   if (state.tidy && !cells.nearest) idx = C.cleanup(idx, gw, gh, 2);
-  const B = state.board, bw = Math.ceil(gw / B), bh = Math.ceil(gh / B);
   res = { gw, gh, B, bw, bh, ox: Math.floor((bw * B - gw) / 2), oy: Math.floor((bh * B - gh) / 2),
           ids: Array.from(idx, i => i < 0 ? 0 : pal[i].id) };
   if (state.colour && !res.ids.includes(state.colour)) state.colour = null;
@@ -250,11 +257,12 @@ function draw() {
 
 // ---------- rails ----------
 function renderSettings() {
-  $("width").value = state.width; $("bsize").value = state.board; $("clearbg").checked = state.clearbg;
+  $("acrossv").textContent = state.across; $("downv").textContent = state.down; $("bsize").value = state.board;
+  $("across-").disabled = state.across <= 1; $("down-").disabled = state.down <= 1;
+  $("across+").disabled = state.across >= MAX_BOARDS; $("down+").disabled = state.down >= MAX_BOARDS; $("clearbg").checked = state.clearbg;
   $("tol").value = state.tol; $("tolv").textContent = state.tol; $("smooth").value = state.smooth;
   $("smoothv").textContent = ["off", "light", "medium", "strong"][state.smooth]; $("tidy").checked = state.tidy;
-  $("presets").innerHTML = [1, 2, 3, 4].map(n => `<button type="button" data-w="${n * state.board}" aria-pressed="${state.width === n * state.board}">${n} across</button>`).join("");
-  if (res) $("sizeinfo").textContent = `${res.gw} × ${res.gh} pegs on ${res.bw * res.bh} board${res.bw * res.bh > 1 ? "s" : ""} (${res.bw} across, ${res.bh} down).`;
+  if (res) $("sizeinfo").textContent = `${res.bw * res.bh} board${res.bw * res.bh > 1 ? "s" : ""}, ${res.bw * res.B} × ${res.bh * res.B} pegs. The picture is ${res.gw} × ${res.gh}.`;
 }
 function renderFilter() {
   if (!res) return;
@@ -292,9 +300,9 @@ function render(again = true) { if (again) convert(); renderSettings(); renderFi
 let pending = 0;
 const soon = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(() => { save(); render(); }); };
 const num = (el, lo, hi) => Math.max(lo, Math.min(hi, Math.round(+el.value || lo)));
-$("width").addEventListener("change", e => { state.width = num(e.target, 8, 480); soon(); });
+for (const k of ["across", "down"]) for (const d of [-1, 1])
+  $(k + (d < 0 ? "-" : "+")).addEventListener("click", () => { state[k] = Math.max(1, Math.min(MAX_BOARDS, state[k] + d)); state.view = "all"; soon(); });
 $("bsize").addEventListener("change", e => { state.board = num(e.target, 8, 120); state.view = "all"; soon(); });
-$("presets").addEventListener("click", e => { const b = e.target.closest("[data-w]"); if (b) { state.width = +b.dataset.w; soon(); } });
 $("clearbg").addEventListener("change", e => { state.clearbg = e.target.checked; soon(); });
 $("tol").addEventListener("input", e => { state.tol = +e.target.value; soon(); });
 $("smooth").addEventListener("input", e => { state.smooth = +e.target.value; soon(); });
