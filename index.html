@@ -72,6 +72,11 @@ button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0
 .pal .near { font-size: 11px; color: var(--warn); white-space: nowrap; }
 .pal .p[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .pal .x { text-align: center; padding: 4px 0; }
+input[type=search] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.cat { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 4px; max-height: 260px; overflow-y: auto; padding: 2px; }
+.cat button { display: flex; align-items: center; gap: 4px; padding: 3px 4px; font-family: var(--mono); font-size: 11px; }
+.cat .sw { width: 16px; height: 16px; flex: none; }
+.cat .sw::after { display: none; }
 #photo { display: block; max-width: 100%; height: auto; cursor: crosshair; border-radius: 6px; }
 .sampled { display: flex; gap: 10px; align-items: center; font-size: 13px; }
 .sampled .big { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
@@ -141,10 +146,20 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
     <section class="beads box">
       <div class="beadgrid">
         <div class="pal-wrap">
+          <p class="label">Bead colours</p>
+          <div class="row" style="margin:6px 0"><label for="range">Range</label><select id="range"></select></div>
+          <div class="row" role="radiogroup" aria-label="Colours the chart uses" style="margin-bottom:10px">
+            <input type="radio" name="src" id="src-mine" value="mine"><label for="src-mine">Chart with my beads</label>
+            <input type="radio" name="src" id="src-range" value="range"><label for="src-range">Chart with every colour in the range</label>
+          </div>
           <p class="label">My beads</p>
-          <p class="hint" style="margin:4px 0 8px">The chart uses only the ticked colours. Edit a code, a name or a colour, or select a row and click a pile in the photo to set its colour from the real beads.</p>
+          <p class="hint" style="margin:4px 0 8px">With "my beads", the chart uses only the ticked colours. Edit a code, a name or a colour, or select a row and click a pile in the photo to set its colour from the real beads.</p>
           <div class="pal" id="pal"></div>
-          <div class="row" style="margin-top:8px"><button type="button" id="add">Add a colour</button><button type="button" id="reset">Back to the Artkal set</button></div>
+          <div class="row" style="margin-top:8px"><button type="button" id="add">Add a colour</button><button type="button" id="reset">Back to the starting set</button></div>
+          <p class="label" style="margin-top:14px">Add from the range</p>
+          <p class="hint" style="margin:4px 0 8px">Click a colour to add it to my beads, or click again to take it out. Colours are measured by the community, so they're close, not exact.</p>
+          <input type="search" id="find" placeholder="Search a code or a name" aria-label="Search the range" style="width:100%;box-sizing:border-box;margin-bottom:6px">
+          <div class="cat" id="cat"></div>
         </div>
         <div>
           <p class="label">Match from a photo</p>
@@ -162,21 +177,23 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
 </div>
 
 <script src="core.js"></script>
+<script src="palettes.js"></script>
 <script>
-const C = window.BeadCore;
-const DEFAULT_PAL = [
-  ["C01", "White", "#f6f4f0"], ["C88", "Light grey", "#c4c0c6"], ["C134", "Lilac grey", "#a096aa"], ["C34", "Dark grey", "#64646c"],
-  ["C155", "Charcoal", "#363238"], ["C69", "Black", "#141016"], ["C27", "Dark purple", "#4e3454"], ["C96", "Caramel", "#b06c3e"],
-  ["C75", "Brown", "#805438"], ["C32", "Dark brown", "#462e22"], ["C08", "Hot pink", "#e63c96"], ["C132", "Magenta", "#aa3caa"],
-  ["C145", "Dark berry", "#6e1e3c"], ["C68", "Aqua", "#78c8d2"],
-].map(([code, name, hex], i) => ({ id: i + 1, code, name, hex, on: true }));
+const C = window.BeadCore, RANGES = window.BEAD_RANGES;
+const STARTING = ["C01", "C02", "C88", "C134", "C34", "C155", "C69", "C27", "C96", "C75", "C32", "C08", "C132", "C145", "C68"];
+const fromRange = (r, codes) => RANGES[r].colours.filter(c => !codes || codes.includes(c[0])).map(([code, name, hex]) => ({ code, name, hex }));
+const DEFAULT_PAL = fromRange("artkal_c", STARTING).map((p, i) => ({ id: i + 1, ...p, on: true }));
 const MAX_BOARDS = 8;
-const state = { across: 1, down: 1, board: 48, clearbg: false, tol: 12, smooth: 0, tidy: true, view: "all", colour: null, pal: DEFAULT_PAL };
+const state = { across: 1, down: 1, board: 48, clearbg: false, tol: 12, smooth: 0, tidy: true, view: "all", colour: null,
+                range: "artkal_c", source: "mine", pal: DEFAULT_PAL };
 try { Object.assign(state, JSON.parse(localStorage.getItem("bead-maker") || "{}")); } catch (e) {}
 const save = () => { try { localStorage.setItem("bead-maker", JSON.stringify(state)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+if (!RANGES[state.range]) state.range = "artkal_c";
 const palById = id => state.pal.find(p => p.id === id);
+const keyOf = p => p.code + p.hex, bead = k => res.pal[k - 1];
+const sel = () => state.colour && res ? res.pal.findIndex(p => keyOf(p) === state.colour) + 1 : 0;
 let img = null, res = null, selectedRow = null;
 
 // ---------- picture -> grid ----------
@@ -195,12 +212,12 @@ function convert() {
   if (state.smooth && W > gw) px = C.median(px, W, H, state.smooth);
   const cells = C.downscale(px, W, H, gw, gh);
   if (state.clearbg) C.clearBackground(cells, state.tol);
-  const pal = state.pal.filter(p => p.on);
+  const pal = state.source === "range" ? fromRange(state.range) : state.pal.filter(p => p.on);
   let idx = C.match(cells, pal);
   if (state.tidy && !cells.nearest) idx = C.cleanup(idx, gw, gh, 2);
-  res = { gw, gh, B, bw, bh, ox: Math.floor((bw * B - gw) / 2), oy: Math.floor((bh * B - gh) / 2),
-          ids: Array.from(idx, i => i < 0 ? 0 : pal[i].id) };
-  if (state.colour && !res.ids.includes(state.colour)) state.colour = null;
+  res = { gw, gh, B, bw, bh, ox: Math.floor((bw * B - gw) / 2), oy: Math.floor((bh * B - gh) / 2), pal,
+          ids: Array.from(idx, i => i + 1) };      // 0 is an empty peg, k is pal[k - 1]
+  if (state.colour && !res.ids.includes(sel())) state.colour = null;
   if (state.view !== "all" && +state.view >= bw * bh) state.view = "all";
 }
 const at = (X, Y) => { const x = X - res.ox, y = Y - res.oy; return x < 0 || y < 0 || x >= res.gw || y >= res.gh ? 0 : res.ids[y * res.gw + x]; };
@@ -228,11 +245,11 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, w, H);
   ctx.fillStyle = css("--board"); ctx.fillRect(MARGIN, MARGIN, cell * v.nx, cell * v.ny);
-  const peg = css("--peg"), bg = css("--board");
+  const peg = css("--peg"), bg = css("--board"), only = sel();
   for (let y = 0; y < v.ny; y++) for (let x = 0; x < v.nx; x++) {
     const k = at(v.x + x, v.y + y), cx = MARGIN + (x + 0.5) * cell, cy = MARGIN + (y + 0.5) * cell;
-    if (!k || (state.colour && k !== state.colour)) { ctx.fillStyle = peg; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.6, cell * 0.09), 0, 7); ctx.fill(); continue; }
-    ctx.fillStyle = palById(k).hex; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.46, 0, 7); ctx.fill();
+    if (!k || (only && k !== only)) { ctx.fillStyle = peg; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.6, cell * 0.09), 0, 7); ctx.fill(); continue; }
+    ctx.fillStyle = bead(k).hex; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.46, 0, 7); ctx.fill();
     if (cell >= 7) { ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.15, 0, 7); ctx.fill(); }
   }
   ctx.font = `500 ${Math.min(11, Math.max(7, cell * 0.9))}px ${css("--mono")}`;
@@ -272,12 +289,13 @@ function renderFilter() {
   $("boards").innerHTML = (n > 1 ? `<button type="button" data-view="all" style="grid-column:1/-1" aria-pressed="${state.view === "all"}">All boards</button>` : "")
     + Array.from({ length: n }, (_, i) => `<button type="button" data-view="${i}" aria-pressed="${state.view === String(i) || (n === 1)}">${i + 1}</button>`).join("");
   const ids = Object.keys(c).map(Number).sort((p, q) => c[q] - c[p]);
-  $("colours").innerHTML = ids.map(k => { const p = palById(k);
-    return `<button type="button" data-colour="${k}" aria-pressed="${k === state.colour}"><span class="sw" style="background:${p.hex}"></span><span class="code">${esc(p.code)}</span><span>${esc(p.name)}</span><span class="count">${c[k]}</span></button>`; }).join("")
+  const only = sel();
+  $("colours").innerHTML = ids.map(k => { const p = bead(k);
+    return `<button type="button" data-colour="${k}" aria-pressed="${k === only}"><span class="sw" style="background:${p.hex}"></span><span class="code">${esc(p.code)}</span><span>${esc(p.name)}</span><span class="count">${c[k]}</span></button>`; }).join("")
     || `<p class="hint">No beads here.</p>`;
   const total = Object.values(c).reduce((s, x) => s + x, 0);
-  $("totalLabel").textContent = state.colour ? `${palById(state.colour).code} on ${v.name.toLowerCase()}` : `All beads on ${v.name.toLowerCase()}`;
-  $("total").textContent = state.colour ? (c[state.colour] || 0) : total;
+  $("totalLabel").textContent = only ? `${bead(only).code} on ${v.name.toLowerCase()}` : `All beads on ${v.name.toLowerCase()}`;
+  $("total").textContent = only ? (c[only] || 0) : total;
 }
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 function renderPal() {
@@ -293,6 +311,18 @@ function renderPal() {
       <span class="near">${near}</span>
       <button type="button" class="x" data-del="${p.id}" aria-label="Remove ${esc(p.code)}">×</button></div>`;
   }).join("");
+  if (document.getElementById("cat")) renderCat();
+}
+function renderCat() {
+  const q = $("find").value.trim().toLowerCase(), mine = new Set(state.pal.map(p => p.code));
+  const list = fromRange(state.range).filter(c => !q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+  $("cat").innerHTML = list.map(c => `<button type="button" data-code="${esc(c.code)}" aria-pressed="${mine.has(c.code)}" title="${esc(c.code)} ${esc(c.name)}">`
+    + `<span class="sw" style="background:${c.hex}"></span>${esc(c.code)}</button>`).join("") || `<p class="hint">No colour matches.</p>`;
+}
+function renderRange() {
+  $("range").innerHTML = Object.entries(RANGES).map(([k, r]) => `<option value="${k}" ${k === state.range ? "selected" : ""}>${esc(r.name)}</option>`).join("");
+  $("src-" + state.source).checked = true;
+  renderCat();
 }
 function render(again = true) { if (again) convert(); renderSettings(); renderFilter(); draw(); }
 
@@ -309,7 +339,7 @@ $("smooth").addEventListener("input", e => { state.smooth = +e.target.value; soo
 $("tidy").addEventListener("change", e => { state.tidy = e.target.checked; soon(); });
 $("boards").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { state.view = b.dataset.view; save(); render(false); } });
 $("colours").addEventListener("click", e => { const b = e.target.closest("[data-colour]"); if (!b) return;
-  const k = +b.dataset.colour; state.colour = state.colour === k ? null : k; save(); render(false); });
+  const k = +b.dataset.colour; state.colour = sel() === k ? null : keyOf(bead(k)); save(); render(false); });
 
 $("pal").addEventListener("input", e => {
   const row = e.target.closest(".p"), f = e.target.dataset.f; if (!row || !f) return;
@@ -328,6 +358,16 @@ $("pal").addEventListener("focusin", e => { const row = e.target.closest(".p"); 
 const nextId = () => Math.max(0, ...state.pal.map(p => p.id)) + 1;
 function addColour(hex, name = "New colour") { const p = { id: nextId(), code: "?", name, hex, on: true }; state.pal.push(p); selectedRow = p.id; renderPal(); soon(); return p; }
 $("add").addEventListener("click", () => addColour("#888888"));
+$("range").addEventListener("change", e => { state.range = e.target.value; renderCat(); soon(); });
+for (const s of ["mine", "range"]) $("src-" + s).addEventListener("change", () => { state.source = s; soon(); });
+$("find").addEventListener("input", renderCat);
+$("cat").addEventListener("click", e => {
+  const b = e.target.closest("[data-code]"); if (!b) return;
+  const code = b.dataset.code, had = state.pal.some(p => p.code === code);
+  if (had) state.pal = state.pal.filter(p => p.code !== code);
+  else state.pal.push({ id: nextId(), ...fromRange(state.range, [code])[0], on: true });
+  renderPal(); soon();
+});
 $("reset").addEventListener("click", () => { state.pal = DEFAULT_PAL.map(p => ({ ...p })); selectedRow = null; renderPal(); soon(); });
 
 $("copy").addEventListener("click", () => {
@@ -335,7 +375,7 @@ $("copy").addEventListener("click", () => {
   const L = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", key = {};
   ids.forEach((k, i) => key[k] = L[i] || "#");
   const rows = []; for (let y = v.y; y < v.y + v.ny; y++) { let s = ""; for (let x = v.x; x < v.x + v.nx; x++) { const k = at(x, y); s += k ? key[k] : "."; } rows.push(s); }
-  const text = `${v.name}, ${v.nx} × ${v.ny}; . is an empty peg\n` + ids.map(k => `${key[k]} = ${palById(k).code} ${palById(k).name} (${c[k]})`).join("\n") + "\n\n" + rows.join("\n");
+  const text = `${v.name}, ${v.nx} × ${v.ny}; . is an empty peg\n` + ids.map(k => `${key[k]} = ${bead(k).code} ${bead(k).name} (${c[k]})`).join("\n") + "\n\n" + rows.join("\n");
   const ta = $("copytext"); ta.value = text;
   const fallback = () => { ta.hidden = false; ta.focus(); ta.select(); $("copy").textContent = "Select all and copy"; };
   try { navigator.clipboard.writeText(text).then(() => { ta.hidden = true; $("copy").textContent = "Copied"; setTimeout(() => $("copy").textContent = "Copy chart as text", 1500); }, fallback); }
@@ -351,7 +391,7 @@ function point(e) {
   const where = state.view === "all" && res.bw * res.bh > 1
     ? `Board ${((v.y + y) / B | 0) * res.bw + ((v.x + x) / B | 0) + 1} · row ${(y % B) + 1}, column ${(x % B) + 1}`
     : `${v.name} · row ${y + 1}, column ${x + 1}`;
-  $("status").textContent = where + " · " + (k ? `${palById(k).code} ${palById(k).name}` : "empty peg");
+  $("status").textContent = where + " · " + (k ? `${bead(k).code} ${bead(k).name}` : "empty peg");
 }
 canvas.addEventListener("pointermove", point);
 canvas.addEventListener("pointerdown", point);
@@ -440,7 +480,7 @@ function show(rgb, text) { $("sampled").hidden = false; $("sampledsw").style.bac
 new ResizeObserver(draw).observe(canvas);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-renderPal(); renderSettings();
+renderRange(); renderPal(); renderSettings();
 load(exampleImage(), "Example donut");
 </script>
 </body>
