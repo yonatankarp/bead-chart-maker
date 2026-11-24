@@ -5,7 +5,7 @@ const fromRange = (r, codes) => RANGES[r].colours.filter(c => !codes || codes.in
 const DEFAULT_PAL = fromRange("artkal_c", STARTING).map((p, i) => ({ id: i + 1, ...p, on: true }));
 const MAX_BOARDS = 8;
 const state = { across: 1, down: 1, board: 48, zoom: 1, scale: 1, panX: 0, panY: 0, clearbg: false, tol: 12, smooth: 0, tidy: true, maxc: 0,
-                view: "all", colour: null, mode: "look", range: "artkal_c", source: "mine", pal: DEFAULT_PAL,
+                view: "all", colour: null, mode: "look", tab: "pic", range: "artkal_c", source: "mine", pal: DEFAULT_PAL,
                 edits: {},   // "x,y" on the boards -> {code, name, hex} painted, or null erased
                 done: {} };  // board index -> colour keys marked done there
 try { Object.assign(state, JSON.parse(localStorage.getItem("bead-maker") || "{}")); } catch (e) {}
@@ -202,6 +202,17 @@ $("zoom").addEventListener("input", e => { state.zoom = +e.target.value / 100; s
 $("panx").addEventListener("input", e => { state.panX = +e.target.value / 100; soon(); });
 $("pany").addEventListener("input", e => { state.panY = +e.target.value / 100; soon(); });
 $("centre").addEventListener("click", () => { state.zoom = 1; state.panX = state.panY = 0; soon(); });
+// The settings' two tabs; the arrow keys move between them, as in any tab list.
+function renderTabs() {
+  if (!$("panel-" + state.tab)) state.tab = "pic";
+  document.querySelectorAll("[data-tab]").forEach(b => { const on = b.dataset.tab === state.tab;
+    b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; $("panel-" + b.dataset.tab).hidden = !on; });
+}
+document.querySelectorAll("[data-tab]").forEach(b => {
+  b.addEventListener("click", () => { state.tab = b.dataset.tab; save(); renderTabs(); });
+  b.addEventListener("keydown", e => { if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const o = document.querySelector(`[data-tab]:not([data-tab="${b.dataset.tab}"])`); o.click(); o.focus(); });
+});
 $("clearbg").addEventListener("change", e => { state.clearbg = e.target.checked; soon(); });
 $("tol").addEventListener("input", e => { state.tol = +e.target.value; soon(); });
 $("smooth").addEventListener("input", e => { state.smooth = +e.target.value; soon(); });
@@ -348,6 +359,8 @@ $("pal").addEventListener("focusin", e => { const row = e.target.closest(".p"); 
 const nextId = () => Math.max(0, ...state.pal.map(p => p.id)) + 1;
 function addColour(hex, name = "New colour") { const p = { id: nextId(), code: "?", name, hex, on: true }; state.pal.push(p); selectedRow = p.id; renderPal(); soon(); return p; }
 $("add").addEventListener("click", () => addColour("#888888"));
+$("editbeads").addEventListener("click", () => $("beadsdlg").showModal());
+$("closebeads").addEventListener("click", () => $("beadsdlg").close());
 $("range").addEventListener("change", e => { state.range = e.target.value; renderCat(); soon(); });
 $("find").addEventListener("input", renderCat);
 $("cat").addEventListener("click", e => {
@@ -388,5 +401,5 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 // On a phone the settings fold away once a picture is in; wider screens always show them.
 narrow.addEventListener("change", () => { if (!narrow.matches) $("settings").open = true; });
-renderRange(); renderPal(); renderSettings(); renderTools(); point(null);
+renderRange(); renderPal(); renderTabs(); renderSettings(); renderTools(); point(null);
 PictureStore.load().then(r => r && r.blob ? load(URL.createObjectURL(r.blob), r.name, false) : load(exampleImage(), "Example donut", false));

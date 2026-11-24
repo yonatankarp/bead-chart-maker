@@ -12,7 +12,7 @@ A static browser tool that turns a picture into a pegboard chart for fuse beads 
   (lone beads fall off when ironed). Pixel art no bigger than the chart is copied exactly.
 - Every Artkal colour, in five ranges (C 2.6 mm Mini, S 5 mm Midi, A, M and R), from the community-measured
   [BeadColors](https://github.com/maxcleme/beadcolors) list (MIT, see `THIRD_PARTY.md`). Chart with every colour in a
-  range, or with your own bead list: add colours from the range by search, edit, tick on and off, saved in the browser.
+  range, or with your own bead list (Edit… beside "My beads"): add colours from the range by search, edit, tick on and off, saved in the browser.
   Colours are matched in Lab space.
 - Match from a photo: photograph a pile from each bag on white paper, click the paper to correct the light,
   then click a pile to set a colour from the real beads. Handy for bags that lost their labels.

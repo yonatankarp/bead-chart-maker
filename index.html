@@ -68,7 +68,16 @@ button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0
 .code { font-family: var(--mono); font-size: 13px; }
 .count { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .total { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-.beads { grid-column: 1 / -1; display: grid; gap: 12px; }
+/* My bead colours open in a window only when asked for, from Edit… by the colour source. */
+dialog.beads { width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; padding: 16px; color: var(--fg); }
+dialog.beads::backdrop { background: rgba(0, 0, 0, 0.45); }
+.dlghead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dlghead h2 { font-family: var(--display); font-size: 1.2rem; margin: 0; }
+#closebeads { text-align: center; }
+.srcrow { display: flex; gap: 4px; }
+.srcrow .src { flex: 1; min-width: 0; }
+.srcrow .src label { white-space: nowrap; padding-inline: 2px; }
+#editbeads { text-align: center; font-size: 13px; padding-inline: 8px; }
 .beadgrid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .beadgrid { grid-template-columns: minmax(0, 1fr); } }
 .pal { display: grid; gap: 4px; }
@@ -89,7 +98,9 @@ input[type=search] { font: inherit; color: inherit; background: var(--bg); borde
 .pal input[type=color] { border-color: var(--ring); }
 /* Settings fold away on a phone; on wider screens they are always open and the summary is hidden. */
 .settings > summary { display: none; }
-.railbody { display: grid; gap: 14px; }
+.railbody, .tabpanel { display: grid; gap: 14px; }
+.tabs button { flex: 1; text-align: center; padding-inline: 2px; font-size: 13px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { position: relative; z-index: 1; font-weight: 600; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .seg { display: flex; }
 .seg button { border-radius: 0; margin-left: -1px; }
@@ -116,7 +127,7 @@ button, select, input[type=number], input[type=text], input[type=search] { min-h
   .settings[open] > summary::after { content: "▴"; }
   .settings[open] > summary { margin-bottom: 10px; }
   #setsum { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); font-weight: 500; }
-  .rail { order: 1; } .filter { order: 2; } .chartbox { order: 3; } .beads { order: 4; }
+  .rail { order: 1; } .filter { order: 2; } .chartbox { order: 3; }
   .chartscroll { max-height: max(240px, calc(100vh - 260px)); max-height: max(240px, calc(100dvh - 260px)); }   /* room for the pinned colour bar and the tools */
   .filter { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; padding: 8px; gap: 8px; box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.35); }
   .filter .label, .filter .total { display: none; }
@@ -146,6 +157,10 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
       <details class="settings" id="settings" open>
       <summary>Picture &amp; settings <span id="setsum"></span></summary>
       <div class="railbody">
+      <div class="seg tabs" role="tablist" aria-label="Settings">
+        <button type="button" role="tab" id="tab-pic" aria-controls="panel-pic" data-tab="pic">Picture &amp; boards</button><button type="button" role="tab" id="tab-tidy" aria-controls="panel-tidy" data-tab="tidy">Clean-up</button>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-pic" aria-labelledby="tab-pic">
       <section>
         <p class="label">Picture</p>
         <div class="row">
@@ -168,6 +183,8 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
         <input id="pany" type="range" min="-100" max="100" step="1">
         <div class="row"><button type="button" id="centre">Fit and centre</button></div>
       </section>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-tidy" aria-labelledby="tab-tidy">
       <section>
         <p class="label">Background</p>
         <div class="row"><input id="clearbg" type="checkbox"><label for="clearbg">Remove the background</label></div>
@@ -187,6 +204,7 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
         <input id="maxc" type="range" min="0" max="30" step="1">
         <p class="hint">Fewer colours means fewer bags to buy. The least used ones go to their nearest kept colour.</p>
       </section>
+      </div>
       </div>
       </details>
     </aside>
@@ -215,9 +233,12 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
     <aside class="filter box">
       <section>
         <p class="label">Colours from</p>
-        <div class="src" role="radiogroup" aria-label="Colours the chart uses">
-          <input type="radio" name="src" id="src-mine" value="mine"><label for="src-mine">My beads</label>
-          <input type="radio" name="src" id="src-range" value="range"><label for="src-range">Whole range</label>
+        <div class="srcrow">
+          <div class="src" role="radiogroup" aria-label="Colours the chart uses">
+            <input type="radio" name="src" id="src-mine" value="mine"><label for="src-mine">My beads</label>
+            <input type="radio" name="src" id="src-range" value="range"><label for="src-range">Whole range</label>
+          </div>
+          <button type="button" id="editbeads" aria-haspopup="dialog" aria-label="Edit my beads" title="Edit my bead colours, or match them from a photo">Edit…</button>
         </div>
       </section>
       <section id="boardsec">
@@ -232,13 +253,14 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
       </section>
     </aside>
 
-    <section class="beads box">
+    <dialog class="beads box" id="beadsdlg" aria-labelledby="beadstitle">
+      <div class="dlghead"><h2 id="beadstitle">My bead colours</h2><button type="button" id="closebeads">Done</button></div>
       <div class="beadgrid">
         <div class="pal-wrap">
           <p class="label">Bead colours</p>
           <div class="row" style="margin:6px 0 10px"><label for="range">Range</label><select id="range"></select></div>
           <p class="label">My beads</p>
-          <p class="hint" style="margin:4px 0 8px">With "My beads" chosen above the colour list, the chart uses only the ticked colours. Edit a code, a name or a colour, or select a row and click a pile in the photo to set its colour from the real beads.</p>
+          <p class="hint" style="margin:4px 0 8px">With "My beads" chosen, the chart uses only the ticked colours. Edit a code, a name or a colour, or select a row and click a pile in the photo to set its colour from the real beads.</p>
           <div class="pal" id="pal"></div>
           <div class="row" style="margin-top:8px"><button type="button" id="add">Add a colour</button><button type="button" id="reset">Back to the starting set</button></div>
           <p class="label" style="margin-top:14px">Add from the range</p>
@@ -257,7 +279,7 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
           <div class="sampled" id="sampled" hidden><span class="big" id="sampledsw"></span><span id="sampledtxt"></span></div>
         </div>
       </div>
-    </section>
+    </dialog>
   </div>
 </div>
 
