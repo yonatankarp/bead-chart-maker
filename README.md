@@ -16,7 +16,7 @@ A static browser tool that turns a picture into a pegboard chart for fuse beads 
   Colours are matched in Lab space.
 - Match from a photo: photograph a pile from each bag on white paper, click the paper to correct the light,
   then click a pile to set a colour from the real beads. Handy for bags that lost their labels.
-- Zoom and move the picture on the boards, and cap the number of colours (fewer bags to buy).
+- Enlarge and move the picture on the boards, zoom into the chart on screen, and cap the number of colours (fewer bags to buy).
 - Paint and erase beads by hand, with undo (Ctrl+Z); hand edits stay on their pegs.
 - Pick a board and a colour to see only those beads, with counts, and mark a colour done on a board.
   Tap a peg to light up its row and column.

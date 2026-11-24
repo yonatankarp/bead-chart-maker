@@ -4,7 +4,7 @@ const STARTING = ["C01", "C02", "C88", "C134", "C34", "C155", "C69", "C27", "C96
 const fromRange = (r, codes) => RANGES[r].colours.filter(c => !codes || codes.includes(c[0])).map(([code, name, hex]) => ({ code, name, hex }));
 const DEFAULT_PAL = fromRange("artkal_c", STARTING).map((p, i) => ({ id: i + 1, ...p, on: true }));
 const MAX_BOARDS = 8;
-const state = { across: 1, down: 1, board: 48, zoom: 1, panX: 0, panY: 0, clearbg: false, tol: 12, smooth: 0, tidy: true, maxc: 0,
+const state = { across: 1, down: 1, board: 48, zoom: 1, scale: 1, panX: 0, panY: 0, clearbg: false, tol: 12, smooth: 0, tidy: true, maxc: 0,
                 view: "all", colour: null, mode: "look", range: "artkal_c", source: "mine", pal: DEFAULT_PAL,
                 edits: {},   // "x,y" on the boards -> {code, name, hex} painted, or null erased
                 done: {} };  // board index -> colour keys marked done there
@@ -15,6 +15,8 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
 if (!RANGES[state.range]) state.range = "artkal_c";
 if (!["look", "select", "paint", "erase"].includes(state.mode)) state.mode = "look";
+const SCALES = [1, 1.5, 2, 3, 4, 6];   // chart zoom on screen: beads and grid grow together
+if (!SCALES.includes(state.scale)) state.scale = 1;
 const painting = () => state.mode === "paint" || state.mode === "erase";
 const palById = id => state.pal.find(p => p.id === id);
 const keyOf = p => p.code + p.hex, bead = k => res.pal[k - 1];
@@ -83,18 +85,34 @@ const doneHere = k => boardsIn().every(b => (state.done[b] || []).includes(keyOf
 // ---------- chart on screen ----------
 const canvas = $("chart"), ctx = canvas.getContext("2d");
 const MARGIN = 26;
-let cell = 10;
+let cell = 10, shown = null;   // shown: what draw last drew, for the pinned numbers
 function draw() {
   if (!res) return;
-  const v = view(), P = picked(), dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 600;
-  cell = (w - MARGIN) / v.nx;
-  const H = MARGIN + cell * v.ny;
-  canvas.width = Math.round(w * dpr); canvas.height = Math.round(H * dpr); canvas.style.height = H + "px";
+  const v = view(), P = picked(), sc = canvas.parentElement;
+  // 100% fits the whole view in the box, across and down (1px spare so rounding never adds a scrollbar).
+  const maxH = parseFloat(getComputedStyle(sc).maxHeight) || innerHeight * 0.7;
+  cell = Math.min(((sc.offsetWidth || 600) - MARGIN - 1) / v.nx, (maxH - MARGIN - 1) / v.ny) * state.scale;
+  const w = MARGIN + cell * v.nx, H = MARGIN + cell * v.ny;
+  const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16e6 / (w * H)));   // Safari draws nothing on a canvas over about 16 million pixels
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(H * dpr); canvas.style.width = w + "px"; canvas.style.height = H + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, w, H);
-  drawChart(ctx, { ...chartBits(v), cell, margin: MARGIN, only: painting() ? 0 : sel(), guide: state.mode === "look" ? guide : null,
+  shown = { ...chartBits(v), cell, margin: MARGIN, only: painting() ? 0 : sel(), guide: state.mode === "look" ? guide : null,
     box: P && { x0: P.x0 - v.x, y0: P.y0 - v.y, x1: P.x1 - v.x, y1: P.y1 - v.y }, out: P && ((X, Y) => !inPick(P, X, Y)),
-    col: { board: css("--board"), peg: css("--peg"), ring: css("--ring"), muted: css("--muted"), guide: css("--accent") } });
+    col: { board: css("--board"), peg: css("--peg"), ring: css("--ring"), muted: css("--muted"), guide: css("--accent") } };
+  drawChart(ctx, shown);
+  pinLabels();
+}
+// Scrolled, the chart's own numbers go out of sight: draw them again over the box's top and left edges.
+function pinLabels() {
+  const sc = canvas.parentElement, lc = $("labels"), lx = lc.getContext("2d"), w = sc.clientWidth, h = sc.clientHeight, dpr = window.devicePixelRatio || 1;
+  lc.width = Math.round(w * dpr); lc.height = Math.round(h * dpr); lc.style.width = w + "px"; lc.style.height = h + "px";
+  if (!shown || (!sc.scrollLeft && !sc.scrollTop)) return;
+  const s = sc.getBoundingClientRect(), r = canvas.getBoundingClientRect(), ox = r.left - s.left, oy = r.top - s.top, M = MARGIN;
+  lx.setTransform(dpr, 0, 0, dpr, 0, 0); lx.fillStyle = css("--panel");
+  lx.fillRect(0, 0, Math.min(w, ox + r.width), M); lx.fillRect(0, 0, M, Math.min(h, oy + r.height));
+  drawLabels(lx, shown, ox, oy);
+  lx.fillStyle = css("--panel"); lx.fillRect(0, 0, M, M);   // the corner covers numbers half slid under it
 }
 const chartBits = v => ({ v, at, hex: k => bead(k).hex, faded: isDone, multi: state.view === "all" && res.bw * res.bh > 1, B: res.B, font: css("--mono") || "monospace" });
 
@@ -140,6 +158,8 @@ function renderTools() {
   document.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
   canvas.classList.toggle("painting", state.mode !== "look");
   $("undo").disabled = !undo.length;
+  $("zv").textContent = Math.round(state.scale * 100) + "%";
+  $("zout").disabled = state.scale === SCALES[0]; $("zin").disabled = state.scale === SCALES.at(-1);
   const n = Object.keys(state.edits).length;
   $("clearedits").hidden = !n; $("clearedits").textContent = `Clear ${n} hand edit${n > 1 ? "s" : ""}`;
 }
@@ -267,6 +287,16 @@ canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
 document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => { state.mode = b.dataset.mode; guide = pick = null; point(null); save(); render(false); }));
 $("undo").addEventListener("click", undoLast);
+// Zooming keeps the middle of the box in the middle; only the box scrolls, so the page and the buttons stay put.
+function zoomChart(step) {
+  const b = canvas.parentElement, fx = (b.scrollLeft + b.clientWidth / 2) / b.scrollWidth, fy = (b.scrollTop + b.clientHeight / 2) / b.scrollHeight;
+  state.scale = SCALES[Math.max(0, Math.min(SCALES.length - 1, SCALES.indexOf(state.scale) + step))];
+  save(); draw(); renderTools();
+  b.scrollLeft = fx * b.scrollWidth - b.clientWidth / 2; b.scrollTop = fy * b.scrollHeight - b.clientHeight / 2;
+}
+canvas.parentElement.addEventListener("scroll", pinLabels, { passive: true });
+$("zin").addEventListener("click", () => zoomChart(1));
+$("zout").addEventListener("click", () => zoomChart(-1));
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey && !e.target.closest?.("input, textarea, select")) { e.preventDefault(); undoLast(); }
 });
@@ -352,7 +382,8 @@ box.addEventListener("dragleave", () => box.classList.remove("drop"));
 box.addEventListener("drop", e => { e.preventDefault(); box.classList.remove("drop"); loadFile(e.dataTransfer.files[0]); });
 document.addEventListener("paste", e => { const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (f) loadFile(f); });
 
-new ResizeObserver(draw).observe(canvas);
+new ResizeObserver(draw).observe(canvas.parentElement);
+addEventListener("resize", draw);   // a window only taller or shorter changes how much fits down
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 // On a phone the settings fold away once a picture is in; wider screens always show them.

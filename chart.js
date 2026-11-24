@@ -3,13 +3,16 @@
 function drawChart(ctx, o) {
   const { v, cell, margin: M, col } = o;
   ctx.fillStyle = col.board; ctx.fillRect(M, M, cell * v.nx, cell * v.ny);
+  // Only beads that would vanish into the board get a faint ring (black on the dark board, white on the light one); a ring on every bead washed the colours out.
+  const lab = h => BeadCore.lab(...BeadCore.hexRgb(h)), boardLab = lab(col.board), lost = new Map();
+  const ringed = h => { if (!lost.has(h)) lost.set(h, BeadCore.dist(lab(h), boardLab) < 12); return lost.get(h); };
   for (let y = 0; y < v.ny; y++) for (let x = 0; x < v.nx; x++) {
     const X = v.x + x, Y = v.y + y, k = o.at(X, Y), cx = M + (x + 0.5) * cell, cy = M + (y + 0.5) * cell;
     if (!k || (o.only && k !== o.only)) { ctx.fillStyle = col.peg; ctx.beginPath(); ctx.arc(cx, cy, Math.max(0.6, cell * 0.09), 0, 7); ctx.fill(); continue; }
     const faded = o.faded(X, Y, k) || (o.out && o.out(X, Y));
     ctx.globalAlpha = faded ? 0.22 : 1;
     ctx.fillStyle = o.hex(k); ctx.beginPath(); ctx.arc(cx, cy, cell * 0.46, 0, 7); ctx.fill();
-    if (cell >= 4 && !faded) { ctx.strokeStyle = col.ring; ctx.lineWidth = Math.max(0.75, cell * 0.06); ctx.stroke(); }   // black and white beads stay visible on either board
+    if (cell >= 4 && !faded && ringed(o.hex(k))) { ctx.globalAlpha = 0.4; ctx.strokeStyle = col.ring; ctx.lineWidth = Math.max(0.75, cell * 0.06); ctx.stroke(); ctx.globalAlpha = 1; }
     if (cell >= 7) { ctx.fillStyle = col.board; ctx.beginPath(); ctx.arc(cx, cy, cell * 0.15, 0, 7); ctx.fill(); }
     ctx.globalAlpha = 1;
   }
@@ -22,9 +25,6 @@ function drawChart(ctx, o) {
     ctx.fillRect(M, gy, v.nx * cell, cell); ctx.fillRect(gx, M, cell, v.ny * cell);
     ctx.globalAlpha = 1; ctx.strokeStyle = col.guide; ctx.lineWidth = 2; ctx.strokeRect(gx, gy, cell, cell);
   }
-  ctx.font = `500 ${Math.min(11, Math.max(7, cell * 0.9))}px ${o.font}`;
-  ctx.fillStyle = col.muted; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  const step = cell < 6 ? 16 : 8;
   const lines = (n, along) => {
     for (let i = 0; i <= n; i++) {
       const p = M + i * cell, edge = o.multi && i % o.B === 0 && i > 0 && i < n, major = i % 8 === 0;
@@ -34,12 +34,22 @@ function drawChart(ctx, o) {
       if (along) { ctx.moveTo(p, M); ctx.lineTo(p, M + v.ny * cell); } else { ctx.moveTo(M, p); ctx.lineTo(M + v.nx * cell, p); }
       ctx.stroke(); ctx.globalAlpha = 1;
     }
-    for (let i = 0; i < n; i += (n <= 48 ? 4 : step)) {
-      const label = o.multi ? (i % o.B) + 1 : i + 1;
-      if (along) ctx.fillText(label, M + (i + 0.5) * cell, M / 2); else ctx.fillText(label, M / 2, M + (i + 0.5) * cell);
-    }
   };
   lines(v.nx, true); lines(v.ny, false);
+  drawLabels(ctx, o);
+}
+
+// The row and column numbers in the margins. ox, oy is where the chart's corner is when it's scrolled; numbers that would slide into the corner are left out.
+function drawLabels(ctx, o, ox = 0, oy = 0) {
+  const { v, cell, margin: M } = o, step = cell < 6 ? 16 : 8;
+  ctx.font = `500 ${Math.min(11, Math.max(7, cell * 0.9))}px ${o.font}`;
+  ctx.fillStyle = o.col.muted; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const [n, along] of [[v.nx, true], [v.ny, false]])
+    for (let i = 0; i < n; i += (n <= 48 ? 4 : step)) {
+      const label = o.multi ? (i % o.B) + 1 : i + 1, p = (along ? ox : oy) + M + (i + 0.5) * cell;
+      if (p < M) continue;
+      if (along) ctx.fillText(label, p, M / 2); else ctx.fillText(label, M / 2, p);
+    }
 }
 
 // A picture to keep or print: the view in light colours, a title, and the colour list with counts.

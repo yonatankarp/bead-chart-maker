@@ -43,7 +43,14 @@ input[type=number], input[type=text], select { font: inherit; color: inherit; ba
 input[type=range] { width: 100%; accent-color: var(--accent); }
 input[type=checkbox] { accent-color: var(--accent); }
 .hint { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
-canvas#chart { display: block; width: 100%; height: auto; touch-action: manipulation; }
+canvas#chart { display: block; margin-inline: auto; touch-action: manipulation; }
+/* The chart scrolls inside its own box, no taller than the window, so zooming never moves the page; the numbers are pinned over its edges. */
+.chartview { position: relative; }
+.chartscroll { overflow: auto; max-height: max(260px, calc(100vh - 150px)); max-height: max(260px, calc(100dvh - 150px)); }
+#labels { position: absolute; top: 0; left: 0; pointer-events: none; }
+.zoombar { display: flex; gap: 4px; align-items: center; }
+.zoombar button { width: 32px; padding: 0; text-align: center; font-size: 16px; }
+.zoombar output { font-family: var(--mono); font-size: 12px; min-width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; }
 .drop { outline: 2px dashed var(--accent); outline-offset: 4px; }
 .status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 1.4em; font-variant-numeric: tabular-nums; }
 button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; }
@@ -110,6 +117,7 @@ button, select, input[type=number], input[type=text], input[type=search] { min-h
   .settings[open] > summary { margin-bottom: 10px; }
   #setsum { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); font-weight: 500; }
   .rail { order: 1; } .filter { order: 2; } .chartbox { order: 3; } .beads { order: 4; }
+  .chartscroll { max-height: max(240px, calc(100vh - 260px)); max-height: max(240px, calc(100dvh - 260px)); }   /* room for the pinned colour bar and the tools */
   .filter { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; padding: 8px; gap: 8px; box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.35); }
   .filter .label, .filter .total { display: none; }
   .boards { display: flex !important; overflow-x: auto; }
@@ -152,7 +160,7 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
         <div class="row step"><span class="steplabel">Down</span><button type="button" id="down-" aria-label="One board fewer down">−</button><output id="downv" aria-live="polite"></output><button type="button" id="down+" aria-label="One board more down">+</button></div>
         <div class="row"><label for="bsize">Pegs per board</label><input id="bsize" type="number" min="8" max="120" step="1"></div>
         <p class="hint" id="sizeinfo"></p>
-        <label for="zoom" class="hint">Zoom: <span id="zoomv"></span></label>
+        <label for="zoom" class="hint">Picture size on the boards: <span id="zoomv"></span></label>
         <input id="zoom" type="range" min="100" max="300" step="5">
         <label for="panx" class="hint">Move left or right</label>
         <input id="panx" type="range" min="-100" max="100" step="1">
@@ -190,9 +198,13 @@ textarea { width: 100%; box-sizing: border-box; font-family: var(--mono); font-s
         </div>
         <button type="button" id="undo" disabled>Undo</button>
         <button type="button" id="clearedits" hidden></button>
-        <button type="button" id="download" class="push">Download PNG</button>
+        <div class="zoombar push" role="group" aria-label="Chart zoom"><button type="button" id="zout" aria-label="Zoom the chart out">−</button><output id="zv" aria-live="polite"></output><button type="button" id="zin" aria-label="Zoom the chart in">+</button></div>
+        <button type="button" id="download">Download PNG</button>
       </div>
-      <canvas id="chart" aria-label="Bead chart"></canvas>
+      <div class="chartview">
+        <div class="chartscroll"><canvas id="chart" aria-label="Bead chart"></canvas></div>
+        <canvas id="labels" aria-hidden="true"></canvas>
+      </div>
       <div class="chartfoot">
         <div class="status" id="status"></div>
         <button type="button" id="copy">Copy as text</button>
